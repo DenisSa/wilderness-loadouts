@@ -269,6 +269,12 @@ public final class LoadoutOptimizer
 
 	private static boolean hasCompatibleSuperset(GearItem first, GearItem second)
 	{
+		if (first.getSlot() == GearSlot.SHIELD)
+		{
+			// An empty shield is what keeps a two-handed weapon legal, so a real
+			// shield is never a superset of it.
+			return first.isEmpty() || !second.isEmpty();
+		}
 		if (first.getSlot() != GearSlot.WEAPON)
 		{
 			return true;

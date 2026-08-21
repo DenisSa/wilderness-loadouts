@@ -323,6 +323,30 @@ public class LoadoutOptimizerTest
 	}
 
 	@Test
+	public void keepsAnEmptyShieldOnTheCandidateFrontier()
+	{
+		List<GearItem> frontier = optimizer.preprocessCandidates(
+			DefenceFocus.MAGIC,
+			Arrays.asList(item(1, GearSlot.SHIELD, 5, 0), GearItem.empty(GearSlot.SHIELD)));
+
+		assertEquals(2, frontier.size());
+	}
+
+	@Test
+	public void prefersATwoHandedWeaponOverACheaperShieldedPair()
+	{
+		GearItem twoHanded = item(1, GearSlot.WEAPON, 100, 0, true, true);
+		GearItem oneHanded = item(2, GearSlot.WEAPON, 10, 0, false, true);
+		GearItem shield = item(3, GearSlot.SHIELD, 5, 0);
+
+		LoadoutResult result = optimize(Arrays.asList(twoHanded, oneHanded, shield), 0, 0);
+
+		assertEquals(1, result.getSelectedItem(GearSlot.WEAPON).getItemId());
+		assertTrue(result.getSelectedItem(GearSlot.SHIELD).isEmpty());
+		assertEquals(100.0, result.getObjectiveScore(), 0.0001);
+	}
+
+	@Test
 	public void lockedTwoHandedWeaponForcesEmptyShield()
 	{
 		GearItem weapon = item(1, GearSlot.WEAPON, 100, 0, true, true);

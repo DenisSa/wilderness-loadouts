@@ -44,12 +44,13 @@ public class OwnedGearServiceTest
 	}
 
 	@Test
-	public void usesRepairCostOnlyForExactTrouverVariant()
+	public void excludesLegacyLowTierTrouverVariants()
 	{
-		assertEquals(96_000L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 0));
-		assertEquals(96_000L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 999_999));
+		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 0));
+		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 999_999));
 		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE, 0));
 		assertEquals(12_345L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE, 12_345));
+		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.TZHAAR_CAPE_FIRE_TROUVER, 999_999));
 	}
 
 	@Test

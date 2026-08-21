@@ -5,7 +5,6 @@ The generator deliberately joins source data instead of deriving GP values from
 item names:
 
 * Jagex's Trouver rework defines the low- and high-tier item families.
-* The OSRS Wiki's current ``(broken)`` table supplies individual repair fees.
 * RuneLite's generated gameval ItemID source supplies exact locked item IDs.
 
 Only a few aliases below bridge differing source names. They never assign a GP
@@ -20,7 +19,6 @@ import html
 import json
 import re
 import sys
-import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,7 +34,6 @@ RUNELITE_ITEM_ID_URL = (
     "https://raw.githubusercontent.com/runelite/runelite/{revision}/"
     "runelite-api/src/main/java/net/runelite/api/gameval/ItemID.java"
 )
-WIKI_API_URL = "https://oldschool.runescape.wiki/api.php"
 USER_AGENT = "wilderness-loadouts generator (https://github.com/DenisSa/wilderness-loadouts)"
 DEEP_WILDERNESS_REPAIR_COST = 500_000
 
@@ -52,12 +49,6 @@ class GamevalItem:
     constant: str
     item_id: int
     display_name: str
-
-
-@dataclass(frozen=True)
-class WikiRepair:
-    cost: int
-    breaks_above_level_20: bool
 
 
 def request_text(url: str) -> str:
@@ -77,24 +68,6 @@ def resolve_runelite_revision() -> str:
     if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("RuneLite's commit API did not return a full commit SHA")
     return revision
-
-
-def fetch_wiki_broken_page() -> Tuple[int, str]:
-    query = urllib.parse.urlencode(
-        {
-            "action": "query",
-            "prop": "revisions",
-            "titles": "(broken)",
-            "rvprop": "ids|content",
-            "rvslots": "main",
-            "format": "json",
-            "formatversion": "2",
-        }
-    )
-    payload = json.loads(request_text(f"{WIKI_API_URL}?{query}"))
-    page = payload["query"]["pages"][0]
-    revision = page["revisions"][0]
-    return int(revision["revid"]), revision["slots"]["main"]["content"]
 
 
 def strip_markup(value: str) -> str:
@@ -145,36 +118,6 @@ def parse_gameval_items(source: str) -> Mapping[str, GamevalItem]:
     return items
 
 
-def parse_wiki_repairs(wikitext: str) -> Mapping[str, WikiRepair]:
-    section_start = wikitext.find("==PvP breakable items==")
-    section_end = wikitext.find("\n==", section_start + 2)
-    if section_start < 0:
-        raise ValueError("Could not locate the Wiki PvP breakable item table")
-    section = wikitext[section_start : section_end if section_end >= 0 else None]
-
-    repairs: Dict[str, WikiRepair] = {}
-    for row in section.split("|-"):
-        behavior = re.search(r"^\|\{\{(Yes|No)\}\}\s*$", row, re.M | re.I)
-        cost = re.search(r"^\|([\d,]+)\s*$", row, re.M)
-        if behavior is None or cost is None:
-            continue
-
-        display_link = re.search(r"^\|\[\[[^|\]]+\|([^\]]+)\]\]\s*$", row, re.M)
-        template_link = re.search(r"^\|\{\{plink[tp]\|([^|}\r\n]+)", row, re.M | re.I)
-        name_match = display_link or template_link
-        if name_match is None:
-            raise ValueError(f"Could not find an item name in Wiki repair row:\n{row}")
-
-        name = normalize_name(name_match.group(1))
-        repairs[name] = WikiRepair(
-            cost=int(cost.group(1).replace(",", "")),
-            breaks_above_level_20=behavior.group(1).lower() == "yes",
-        )
-    if not repairs:
-        raise ValueError("No numeric repair rows were parsed from the Wiki")
-    return repairs
-
-
 def source_name(item: GamevalItem) -> str:
     constant = item.constant
     if constant.startswith("CASTLEWARS_MAGE_"):
@@ -192,8 +135,7 @@ def build_values(
     items: Mapping[str, GamevalItem],
     low_tier_names: Set[str],
     high_tier_names: Set[str],
-    wiki_repairs: Mapping[str, WikiRepair],
-) -> Mapping[int, Tuple[str, int]]:
+) -> Tuple[Mapping[int, Tuple[str, int]], Mapping[int, str]]:
     locked_items = [
         item
         for item in items.values()
@@ -206,6 +148,7 @@ def build_values(
     }
 
     values: Dict[int, Tuple[str, int]] = {}
+    excluded_legacy: Dict[int, str] = {}
     covered_low: Set[str] = set()
     covered_high: Set[str] = set()
     for item in locked_items:
@@ -219,12 +162,7 @@ def build_values(
 
         if name not in low_tier_names:
             continue
-        repair = wiki_repairs.get(name)
-        if repair is None:
-            raise ValueError(f"No Wiki repair value was found for Jagex item family: {name}")
-        if not repair.breaks_above_level_20:
-            raise ValueError(f"Wiki marks Jagex low-tier item as not breaking above level 20: {name}")
-        values[item.item_id] = (item.constant, repair.cost)
+        excluded_legacy[item.item_id] = item.constant
         covered_low.add(name)
 
     missing_low = sorted(low_tier_names - covered_low)
@@ -238,7 +176,9 @@ def build_values(
         raise ValueError("; ".join(messages))
     if not values:
         raise ValueError("No Trouver risk values were generated")
-    return values
+    if not excluded_legacy:
+        raise ValueError("No legacy low-tier Trouver IDs were generated")
+    return values, excluded_legacy
 
 
 def grouped_constants(values: Mapping[int, Tuple[str, int]]) -> Iterable[Tuple[int, List[str]]]:
@@ -251,8 +191,8 @@ def grouped_constants(values: Mapping[int, Tuple[str, int]]) -> Iterable[Tuple[i
 
 def render_java(
     values: Mapping[int, Tuple[str, int]],
+    excluded_legacy: Mapping[int, str],
     runelite_revision: str,
-    wiki_revision: int,
     jagex_hash: str,
 ) -> str:
     cases: List[str] = []
@@ -260,6 +200,12 @@ def render_java(
         for constant in constants:
             cases.append(f"\t\t\tcase ItemID.{constant}:")
         cases.append(f"\t\t\t\treturn {cost:_}L;")
+
+    legacy_cases = [
+        f"\t\t\tcase ItemID.{constant}:"
+        for constant in sorted(excluded_legacy.values())
+    ]
+    legacy_cases.append("\t\t\t\treturn true;")
 
     return f"""/*
  * Copyright (c) 2026, DenisSa
@@ -292,7 +238,6 @@ import net.runelite.api.gameval.ItemID;
 /**
  * Generated by scripts/generate_trouver_risk_values.py. Do not edit manually.
  * RuneLite revision: {runelite_revision}
- * OSRS Wiki (broken) revision: {wiki_revision}
  * Jagex Trouver categories SHA-256: {jagex_hash}
  */
 final class TrouverRiskValues
@@ -310,6 +255,16 @@ final class TrouverRiskValues
 \t\t\t\treturn 0L;
 \t\t}}
 \t}}
+
+\tstatic boolean isLegacyLowTier(int itemId)
+\t{{
+\t\tswitch (itemId)
+\t\t{{
+{chr(10).join(legacy_cases)}
+\t\t\tdefault:
+\t\t\t\treturn false;
+\t\t}}
+\t}}
 }}
 """
 
@@ -318,18 +273,16 @@ def generate() -> str:
     runelite_revision = resolve_runelite_revision()
     item_source = request_text(RUNELITE_ITEM_ID_URL.format(revision=runelite_revision))
     jagex_page = request_text(JAGEX_TROUVER_URL)
-    wiki_revision, wiki_page = fetch_wiki_broken_page()
 
     low_tier_names = extract_jagex_list(jagex_page, "The items in this category are:")
     high_tier_names = extract_jagex_list(
         jagex_page,
         "For clarity, these 'higher tier' items are as follows:",
     )
-    values = build_values(
+    values, excluded_legacy = build_values(
         parse_gameval_items(item_source),
         low_tier_names,
         high_tier_names,
-        parse_wiki_repairs(wiki_page),
     )
     jagex_input = "\n".join(
         [f"deep-wilderness={DEEP_WILDERNESS_REPAIR_COST}"]
@@ -337,7 +290,7 @@ def generate() -> str:
         + [f"high={name}" for name in sorted(high_tier_names)]
     )
     jagex_hash = hashlib.sha256(jagex_input.encode("utf-8")).hexdigest()
-    return render_java(values, runelite_revision, wiki_revision, jagex_hash)
+    return render_java(values, excluded_legacy, runelite_revision, jagex_hash)
 
 
 def main() -> int:

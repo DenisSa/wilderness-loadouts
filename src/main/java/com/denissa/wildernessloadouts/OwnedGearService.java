@@ -149,6 +149,10 @@ public class OwnedGearService
 
 	static long resolveRiskValue(int itemId, int marketPrice)
 	{
+		if (TrouverRiskValues.isLegacyLowTier(itemId))
+		{
+			return 0L;
+		}
 		long repairCost = TrouverRiskValues.getRepairCost(itemId);
 		return repairCost > 0 ? repairCost : Math.max(0, marketPrice);
 	}

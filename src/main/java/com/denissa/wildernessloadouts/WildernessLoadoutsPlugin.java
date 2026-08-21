@@ -320,6 +320,7 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 
 				latestResult = result;
 				panel.displayResult(request, result, ownedGear);
+				refreshOpenBankLayout(generation, result);
 			});
 		}
 		catch (IllegalArgumentException exception)
@@ -345,5 +346,44 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 				}
 			});
 		}
+	}
+
+	private void refreshOpenBankLayout(long generation, LoadoutResult result)
+	{
+		clientThread.invokeLater(() ->
+		{
+			if (generation != calculationGeneration.get() || !bankLayoutService.isGeneratedLayoutOpen())
+			{
+				return;
+			}
+
+			String error;
+			try
+			{
+				error = bankLayoutService.showLoadout(result);
+			}
+			catch (RuntimeException exception)
+			{
+				log.error("Unable to refresh Wilderness Loadouts bank layout", exception);
+				error = "The virtual bank layout could not be refreshed.";
+			}
+			if (error != null)
+			{
+				bankLayoutService.clearGeneratedLayout();
+			}
+
+			String message = error;
+			SwingUtilities.invokeLater(() ->
+			{
+				if (panel == null || generation != calculationGeneration.get())
+				{
+					return;
+				}
+				panel.setBankLayoutVisible(message == null);
+				panel.showStatus(
+					message == null ? "Loadout and virtual bank layout updated." : message,
+					message != null);
+			});
+		});
 	}
 }

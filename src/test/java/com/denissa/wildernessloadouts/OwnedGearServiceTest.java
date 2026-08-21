@@ -74,6 +74,32 @@ public class OwnedGearServiceTest
 	}
 
 	@Test
+	public void doesNotAdviseAParchmentForLegacyLowTierItems()
+	{
+		LossProfile unlocked = LossProfileResolver.resolve(ItemID.TZHAAR_CAPE_FIRE, ignored -> 0);
+		LossProfile locked = LossProfileResolver.resolve(ItemID.TZHAAR_CAPE_FIRE_TROUVER, ignored -> 0);
+
+		assertEquals(
+			LossProfile.EligibilityPolicy.LEGACY_TROUVER_UNLOCKED,
+			unlocked.getEligibilityPolicy());
+		assertEquals(
+			"a Trouver parchment will not make this usable",
+			unlocked.getEligibilityPolicy().getExclusionReason());
+		assertEquals(LossProfile.EligibilityPolicy.LEGACY_TROUVER, locked.getEligibilityPolicy());
+	}
+
+	@Test
+	public void stillAdvisesAParchmentForCurrentHighTierItems()
+	{
+		LossProfile unlocked = LossProfileResolver.resolve(ItemID.INFERNAL_CAPE, ignored -> 0);
+		LossProfile locked = LossProfileResolver.resolve(ItemID.INFERNAL_CAPE_TROUVER, ignored -> 0);
+
+		assertEquals(LossProfile.EligibilityPolicy.UNLOCKED_TROUVER, unlocked.getEligibilityPolicy());
+		assertTrue(locked.isAutoEligible());
+		assertEquals(500_000L, locked.getCostIfUnprotected());
+	}
+
+	@Test
 	public void suppliesExactQuestShopAndNpcReplacementValues()
 	{
 		LossProfile barrowsGloves = LossProfileResolver.resolve(

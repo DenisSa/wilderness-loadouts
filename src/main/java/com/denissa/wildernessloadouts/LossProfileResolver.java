@@ -58,10 +58,18 @@ final class LossProfileResolver
 				"Jagex Trouver system rework");
 		}
 
-		if (TrouverRiskValues.isUnlockedTrouverCapable(itemId))
+		if (TrouverRiskValues.isUnlockedHighTier(itemId))
 		{
 			return LossProfile.excluded(
 				LossProfile.EligibilityPolicy.UNLOCKED_TROUVER,
+				LossProfile.NonMonetaryBurden.REACQUISITION_TIME,
+				"Jagex Trouver system rework");
+		}
+
+		if (TrouverRiskValues.isUnlockedLegacyLowTier(itemId))
+		{
+			return LossProfile.excluded(
+				LossProfile.EligibilityPolicy.LEGACY_TROUVER_UNLOCKED,
 				LossProfile.NonMonetaryBurden.REACQUISITION_TIME,
 				"Jagex Trouver system rework");
 		}

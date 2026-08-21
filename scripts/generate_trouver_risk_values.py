@@ -135,7 +135,12 @@ def build_values(
     items: Mapping[str, GamevalItem],
     low_tier_names: Set[str],
     high_tier_names: Set[str],
-) -> Tuple[Mapping[int, Tuple[str, int]], Mapping[int, str], Mapping[int, str]]:
+) -> Tuple[
+    Mapping[int, Tuple[str, int]],
+    Mapping[int, str],
+    Mapping[int, str],
+    Mapping[int, str],
+]:
     locked_items = [
         item
         for item in items.values()
@@ -149,7 +154,8 @@ def build_values(
 
     values: Dict[int, Tuple[str, int]] = {}
     excluded_legacy: Dict[int, str] = {}
-    unlocked_capable: Dict[int, str] = {}
+    unlocked_high: Dict[int, str] = {}
+    unlocked_legacy: Dict[int, str] = {}
     covered_low: Set[str] = set()
     covered_high: Set[str] = set()
     for item in locked_items:
@@ -157,7 +163,7 @@ def build_values(
         is_cache_mangled = item.constant in mangled_normal_constants
         if name in high_tier_names or is_cache_mangled:
             values[item.item_id] = (item.constant, DEEP_WILDERNESS_REPAIR_COST)
-            add_unlocked_variant(items, item, unlocked_capable)
+            add_unlocked_variant(items, item, unlocked_high)
             if name in high_tier_names:
                 covered_high.add(name)
             continue
@@ -165,7 +171,7 @@ def build_values(
         if name not in low_tier_names:
             continue
         excluded_legacy[item.item_id] = item.constant
-        add_unlocked_variant(items, item, unlocked_capable)
+        add_unlocked_variant(items, item, unlocked_legacy)
         covered_low.add(name)
 
     missing_low = sorted(low_tier_names - covered_low)
@@ -181,9 +187,11 @@ def build_values(
         raise ValueError("No Trouver risk values were generated")
     if not excluded_legacy:
         raise ValueError("No legacy low-tier Trouver IDs were generated")
-    if not unlocked_capable:
-        raise ValueError("No unlocked Trouver-capable IDs were generated")
-    return values, excluded_legacy, unlocked_capable
+    if not unlocked_high:
+        raise ValueError("No unlocked high-tier Trouver IDs were generated")
+    if not unlocked_legacy:
+        raise ValueError("No unlocked legacy low-tier Trouver IDs were generated")
+    return values, excluded_legacy, unlocked_high, unlocked_legacy
 
 
 def add_unlocked_variant(
@@ -212,7 +220,8 @@ def grouped_constants(values: Mapping[int, Tuple[str, int]]) -> Iterable[Tuple[i
 def render_java(
     values: Mapping[int, Tuple[str, int]],
     excluded_legacy: Mapping[int, str],
-    unlocked_capable: Mapping[int, str],
+    unlocked_high: Mapping[int, str],
+    unlocked_legacy: Mapping[int, str],
     runelite_revision: str,
     jagex_hash: str,
 ) -> str:
@@ -228,11 +237,17 @@ def render_java(
     ]
     legacy_cases.append("\t\t\t\treturn true;")
 
-    unlocked_cases = [
+    unlocked_high_cases = [
         f"\t\t\tcase ItemID.{constant}:"
-        for constant in sorted(unlocked_capable.values())
+        for constant in sorted(unlocked_high.values())
     ]
-    unlocked_cases.append("\t\t\t\treturn true;")
+    unlocked_high_cases.append("\t\t\t\treturn true;")
+
+    unlocked_legacy_cases = [
+        f"\t\t\tcase ItemID.{constant}:"
+        for constant in sorted(unlocked_legacy.values())
+    ]
+    unlocked_legacy_cases.append("\t\t\t\treturn true;")
 
     return f"""/*
  * Copyright (c) 2026, DenisSa
@@ -293,11 +308,21 @@ final class TrouverRiskValues
 \t\t}}
 \t}}
 
-\tstatic boolean isUnlockedTrouverCapable(int itemId)
+\tstatic boolean isUnlockedHighTier(int itemId)
 \t{{
 \t\tswitch (itemId)
 \t\t{{
-{chr(10).join(unlocked_cases)}
+{chr(10).join(unlocked_high_cases)}
+\t\t\tdefault:
+\t\t\t\treturn false;
+\t\t}}
+\t}}
+
+\tstatic boolean isUnlockedLegacyLowTier(int itemId)
+\t{{
+\t\tswitch (itemId)
+\t\t{{
+{chr(10).join(unlocked_legacy_cases)}
 \t\t\tdefault:
 \t\t\t\treturn false;
 \t\t}}
@@ -316,7 +341,7 @@ def generate() -> str:
         jagex_page,
         "For clarity, these 'higher tier' items are as follows:",
     )
-    values, excluded_legacy, unlocked_capable = build_values(
+    values, excluded_legacy, unlocked_high, unlocked_legacy = build_values(
         parse_gameval_items(item_source),
         low_tier_names,
         high_tier_names,
@@ -330,7 +355,8 @@ def generate() -> str:
     return render_java(
         values,
         excluded_legacy,
-        unlocked_capable,
+        unlocked_high,
+        unlocked_legacy,
         runelite_revision,
         jagex_hash,
     )

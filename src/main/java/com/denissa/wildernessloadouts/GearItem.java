@@ -39,6 +39,7 @@ public final class GearItem
 	private final long riskValue;
 	private final boolean twoHanded;
 	private final boolean priceKnown;
+	private final boolean trouverRepairValue;
 
 	public GearItem(
 		int itemId,
@@ -53,6 +54,35 @@ public final class GearItem
 		boolean twoHanded,
 		boolean priceKnown)
 	{
+		this(
+			itemId,
+			name,
+			slot,
+			stabDefence,
+			slashDefence,
+			crushDefence,
+			magicDefence,
+			rangedDefence,
+			riskValue,
+			twoHanded,
+			priceKnown,
+			false);
+	}
+
+	public GearItem(
+		int itemId,
+		String name,
+		GearSlot slot,
+		int stabDefence,
+		int slashDefence,
+		int crushDefence,
+		int magicDefence,
+		int rangedDefence,
+		long riskValue,
+		boolean twoHanded,
+		boolean priceKnown,
+		boolean trouverRepairValue)
+	{
 		this.itemId = itemId;
 		this.name = Objects.requireNonNull(name);
 		this.slot = Objects.requireNonNull(slot);
@@ -63,7 +93,8 @@ public final class GearItem
 		this.rangedDefence = rangedDefence;
 		this.riskValue = Math.max(0, riskValue);
 		this.twoHanded = twoHanded;
-		this.priceKnown = priceKnown;
+		this.priceKnown = priceKnown || trouverRepairValue;
+		this.trouverRepairValue = trouverRepairValue;
 	}
 
 	public static GearItem empty(GearSlot slot)
@@ -124,6 +155,11 @@ public final class GearItem
 	public boolean isPriceKnown()
 	{
 		return priceKnown;
+	}
+
+	public boolean isTrouverRepairValue()
+	{
+		return trouverRepairValue;
 	}
 
 	public boolean isEmpty()

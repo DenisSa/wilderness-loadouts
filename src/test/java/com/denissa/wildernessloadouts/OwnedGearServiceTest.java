@@ -25,7 +25,9 @@
 package com.denissa.wildernessloadouts;
 
 import net.runelite.api.Item;
+import net.runelite.api.gameval.ItemID;
 import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -39,5 +41,21 @@ public class OwnedGearServiceTest
 		assertFalse(OwnedGearService.isPhysicalItem(new Item(1, 1), false, true));
 		assertFalse(OwnedGearService.isPhysicalItem(new Item(1, 0), false, false));
 		assertFalse(OwnedGearService.isPhysicalItem(new Item(-1, 1), false, false));
+	}
+
+	@Test
+	public void usesRepairCostOnlyForExactTrouverVariant()
+	{
+		assertEquals(96_000L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 0));
+		assertEquals(96_000L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 999_999));
+		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE, 0));
+		assertEquals(12_345L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE, 12_345));
+	}
+
+	@Test
+	public void usesConservativeDeepWildernessFeeForHighTierTrouverItems()
+	{
+		assertEquals(500_000L, OwnedGearService.resolveRiskValue(ItemID.GAME_PEST_MELEE_HELM_TROUVER, 0));
+		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.GAME_PEST_MELEE_HELM, 0));
 	}
 }

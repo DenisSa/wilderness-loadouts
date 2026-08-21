@@ -139,7 +139,8 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 		JLabel disclaimer = new JLabel(
 			"<html><small>Protected/core items are assumed protected for loadout planning. "
-				+ "High risk protects none. Risk is an estimate based on RuneLite item prices.</small></html>");
+				+ "High risk protects none. Risk uses RuneLite prices and deep-Wilderness repair fees "
+				+ "for items physically locked with Trouver parchment.</small></html>");
 		disclaimer.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		add(disclaimer);
 
@@ -472,7 +473,13 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 	private static String formatPrice(GearItem item)
 	{
-		return item.isPriceKnown() ? "~" + formatGp(item.getRiskValue()) : "unpriced";
+		if (!item.isPriceKnown())
+		{
+			return "unpriced";
+		}
+		return item.isTrouverRepairValue()
+			? "repair " + formatGp(item.getRiskValue())
+			: "~" + formatGp(item.getRiskValue());
 	}
 
 	private static String shorten(String value, int maxLength)

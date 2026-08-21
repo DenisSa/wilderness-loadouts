@@ -124,6 +124,12 @@ public class OwnedGearService
 
 			ItemComposition composition = itemManager.getItemComposition(itemId);
 			int price = itemManager.getItemPrice(itemId);
+			long riskValue = resolveRiskValue(itemId, price);
+			if (riskValue <= 0)
+			{
+				continue;
+			}
+			boolean trouverRepairValue = TrouverRiskValues.getRepairCost(itemId) > 0;
 			gear.add(new GearItem(
 				itemId,
 				composition.getName(),
@@ -133,11 +139,18 @@ public class OwnedGearService
 				equipment.getDcrush(),
 				equipment.getDmagic(),
 				equipment.getDrange(),
-				Math.max(0, price),
+				riskValue,
 				equipment.isTwoHanded(),
-				price > 0));
+				true,
+				trouverRepairValue));
 		}
 		return gear;
+	}
+
+	static long resolveRiskValue(int itemId, int marketPrice)
+	{
+		long repairCost = TrouverRiskValues.getRepairCost(itemId);
+		return repairCost > 0 ? repairCost : Math.max(0, marketPrice);
 	}
 
 	private void addContainerItems(Collection<Integer> itemIds, ItemContainer container)

@@ -343,24 +343,8 @@ public class WildernessLoadoutsPanel extends PluginPanel
 	private void showAlternatives(GearSlot slot)
 	{
 		DefenceFocus focus = (DefenceFocus) focusSelector.getSelectedItem();
-		List<GearItem> candidates = new ArrayList<>();
-		for (GearItem item : latestOwnedGear)
-		{
-			if (item.getSlot() == slot)
-			{
-				candidates.add(item);
-			}
-		}
-		candidates.sort(Comparator
-			.comparing((GearItem item) -> !item.getLossProfile().isAutoEligible())
-			.thenComparing(Comparator
-			.comparingDouble((GearItem item) -> focus.score(item)).reversed()
-			.thenComparingLong(item -> item.getLossProfile().getCostIfUnprotected())
-			.thenComparingInt(GearItem::getItemId)));
-		if (candidates.size() > ALTERNATIVE_LIMIT)
-		{
-			candidates = new ArrayList<>(candidates.subList(0, ALTERNATIVE_LIMIT));
-		}
+		int currentItemId = currentSelectionId(slot);
+		List<GearItem> candidates = buildAlternatives(latestOwnedGear, slot, focus, currentItemId);
 
 		DefaultListModel<GearItem> model = new DefaultListModel<>();
 		for (GearItem candidate : candidates)
@@ -372,7 +356,9 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		list.setVisibleRowCount(Math.min(6, Math.max(1, model.size())));
 		if (!model.isEmpty())
 		{
-			list.setSelectedIndex(0);
+			int selectedIndex = Math.max(0, indexOfItem(candidates, currentItemId));
+			list.setSelectedIndex(selectedIndex);
+			list.ensureIndexIsVisible(selectedIndex);
 		}
 
 		Object[] options = {"Lock selected", "Auto", "Empty", "Cancel"};
@@ -412,6 +398,69 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		{
 			setSlotSelection(slot, LoadoutSlotSelection.empty());
 		}
+	}
+
+	/**
+	 * The slot's alternatives, ranked eligible-first then by focus score. Capped at
+	 * ALTERNATIVE_LIMIT, except that the slot's current item is always present: it is
+	 * what the dialog preselects, and hiding it would let a confirm silently relock
+	 * the slot to a different item.
+	 */
+	static List<GearItem> buildAlternatives(
+		List<GearItem> ownedGear,
+		GearSlot slot,
+		DefenceFocus focus,
+		int currentItemId)
+	{
+		List<GearItem> candidates = new ArrayList<>();
+		for (GearItem item : ownedGear)
+		{
+			if (item.getSlot() == slot)
+			{
+				candidates.add(item);
+			}
+		}
+		candidates.sort(Comparator
+			.comparing((GearItem item) -> !item.getLossProfile().isAutoEligible())
+			.thenComparing(Comparator
+			.comparingDouble((GearItem item) -> focus.score(item)).reversed()
+			.thenComparingLong(item -> item.getLossProfile().getCostIfUnprotected())
+			.thenComparingInt(GearItem::getItemId)));
+		if (candidates.size() <= ALTERNATIVE_LIMIT)
+		{
+			return candidates;
+		}
+
+		int currentIndex = indexOfItem(candidates, currentItemId);
+		List<GearItem> visible = new ArrayList<>(candidates.subList(0, ALTERNATIVE_LIMIT));
+		if (currentIndex >= ALTERNATIVE_LIMIT)
+		{
+			visible.add(candidates.get(currentIndex));
+		}
+		return visible;
+	}
+
+	private int currentSelectionId(GearSlot slot)
+	{
+		LoadoutSlotSelection selection = slotSelections.get(slot);
+		if (selection.getState() == SlotState.LOCKED)
+		{
+			return selection.getLockedItemId();
+		}
+		GearItem selected = latestResult == null ? null : latestResult.getSelectedItem(slot);
+		return selected == null || selected.isEmpty() ? -1 : selected.getItemId();
+	}
+
+	private static int indexOfItem(List<GearItem> items, int itemId)
+	{
+		for (int i = 0; i < items.size(); i++)
+		{
+			if (items.get(i).getItemId() == itemId)
+			{
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	private void setSlotSelection(GearSlot slot, LoadoutSlotSelection selection)

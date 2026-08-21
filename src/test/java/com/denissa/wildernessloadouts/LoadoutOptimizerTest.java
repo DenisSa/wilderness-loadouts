@@ -71,6 +71,42 @@ public class LoadoutOptimizerTest
 	}
 
 	@Test
+	public void keepsCandidateThatIsCheaperOnlyWhenProtected()
+	{
+		GearItem cheaperUnprotected = item(
+			1,
+			GearSlot.HEAD,
+			10,
+			LossProfile.exact(
+				100,
+				100,
+				true,
+				LossProfile.ReacquisitionMethod.SPECIAL_RULE,
+				LossProfile.NonMonetaryBurden.NONE,
+				"Test rule"));
+		GearItem cheaperProtected = item(
+			2,
+			GearSlot.HEAD,
+			10,
+			LossProfile.exact(
+				110,
+				0,
+				true,
+				LossProfile.ReacquisitionMethod.SPECIAL_RULE,
+				LossProfile.NonMonetaryBurden.NONE,
+				"Test rule"));
+
+		List<GearItem> frontier = optimizer.preprocessCandidates(
+			DefenceFocus.MAGIC,
+			Arrays.asList(cheaperUnprotected, cheaperProtected));
+		LoadoutResult result = optimize(frontier, 3, 0);
+
+		assertEquals(2, frontier.size());
+		assertEquals(2, result.getSelectedItem(GearSlot.HEAD).getItemId());
+		assertTrue(result.isProtected(GearSlot.HEAD));
+	}
+
+	@Test
 	public void choosesHigherScoreWhenBudgetAllowsAndCheaperWhenItDoesNot()
 	{
 		List<GearItem> gear = withCore(
@@ -105,11 +141,72 @@ public class LoadoutOptimizerTest
 
 		LoadoutResult three = optimize(gear, 3, 0);
 		LoadoutResult four = optimize(gear, 4, 0);
+		LoadoutResult one = optimize(gear, 1, 0);
 
+		assertEquals(40.0, one.getObjectiveScore(), 0.0001);
+		assertEquals(1, one.getProtectedSlots().size());
 		assertEquals(90.0, three.getObjectiveScore(), 0.0001);
 		assertTrue(three.getSelectedItem(GearSlot.AMMO).isEmpty());
 		assertEquals(100.0, four.getObjectiveScore(), 0.0001);
 		assertEquals(4, four.getProtectedSlots().size());
+	}
+
+	@Test
+	public void protectedResidualLossIsReportedOutsideFillerBudget()
+	{
+		GearItem item = item(
+			1,
+			GearSlot.HEAD,
+			10,
+			LossProfile.exact(
+				100,
+				50,
+				true,
+				LossProfile.ReacquisitionMethod.SPECIAL_RULE,
+				LossProfile.NonMonetaryBurden.NONE,
+				"Test rule"));
+
+		GearItem alwaysLost = item(
+			2,
+			GearSlot.BODY,
+			5,
+			LossProfile.exact(
+				20,
+				20,
+				false,
+				LossProfile.ReacquisitionMethod.PERDU,
+				LossProfile.NonMonetaryBurden.NONE,
+				"Test rule"));
+		LoadoutResult result = optimize(Arrays.asList(item, alwaysLost), 1, 20);
+
+		assertEquals(1, result.getSelectedItem(GearSlot.HEAD).getItemId());
+		assertEquals(2, result.getSelectedItem(GearSlot.BODY).getItemId());
+		assertTrue(result.isProtected(GearSlot.HEAD));
+		assertEquals(20L, result.getFillerRisk());
+		assertEquals(50L, result.getOtherRisk());
+		assertEquals(70L, result.getTotalRisk());
+	}
+
+	@Test
+	public void alwaysLostItemsCannotConsumeAProtectedSlot()
+	{
+		GearItem lunarLike = item(
+			1,
+			GearSlot.RING,
+			10,
+			LossProfile.exact(
+				8_000,
+				8_000,
+				false,
+				LossProfile.ReacquisitionMethod.PERDU,
+				LossProfile.NonMonetaryBurden.NONE,
+				"Test Perdu value"));
+
+		LoadoutResult result = optimize(Collections.singletonList(lunarLike), 3, 8_000);
+
+		assertEquals(1, result.getSelectedItem(GearSlot.RING).getItemId());
+		assertFalse(result.isProtected(GearSlot.RING));
+		assertEquals(8_000L, result.getFillerRisk());
 	}
 
 	@Test
@@ -126,6 +223,37 @@ public class LoadoutOptimizerTest
 		assertTrue(result.getProtectedSlots().isEmpty());
 		assertEquals(1, result.getSelectedItem(GearSlot.HEAD).getItemId());
 		assertTrue(result.getSelectedItem(GearSlot.CAPE).isEmpty());
+	}
+
+	@Test
+	public void findsModeledUntradeableLoadoutOptimum()
+	{
+		GearItem mythicalCape = item(1, GearSlot.CAPE, 8, exact(10_000));
+		GearItem runeGloves = item(2, GearSlot.GLOVES, 4, exact(6_500));
+		GearItem barrowsGloves = item(3, GearSlot.GLOVES, 6, exact(130_000));
+		GearItem ringOfShadows = item(4, GearSlot.RING, 5, exact(75_000));
+		GearItem lunarRing = item(
+			5,
+			GearSlot.RING,
+			2,
+			LossProfile.exact(
+				8_000,
+				8_000,
+				false,
+				LossProfile.ReacquisitionMethod.PERDU,
+				LossProfile.NonMonetaryBurden.NONE,
+				"Test Perdu value"));
+
+		LoadoutResult result = optimize(
+			Arrays.asList(mythicalCape, runeGloves, barrowsGloves, ringOfShadows, lunarRing),
+			0,
+			200_000);
+
+		assertEquals(1, result.getSelectedItem(GearSlot.CAPE).getItemId());
+		assertEquals(2, result.getSelectedItem(GearSlot.GLOVES).getItemId());
+		assertEquals(4, result.getSelectedItem(GearSlot.RING).getItemId());
+		assertEquals(17.0, result.getObjectiveScore(), 0.0001);
+		assertEquals(91_500L, result.getFillerRisk());
 	}
 
 	@Test
@@ -226,14 +354,23 @@ public class LoadoutOptimizerTest
 	}
 
 	@Test
-	public void warnsWhenSelectedItemHasUnknownPrice()
+	public void excludesUnknownReplacementValuesFromAuto()
 	{
 		GearItem unpriced = item(1, GearSlot.HEAD, 10, 0, false, false);
 
 		LoadoutResult result = optimize(Collections.singletonList(unpriced), 3, 0);
 
-		assertEquals(1, result.getSelectedItem(GearSlot.HEAD).getItemId());
-		assertTrue(result.hasUnpricedItemsSelected());
+		assertTrue(result.getSelectedItem(GearSlot.HEAD).isEmpty());
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void refusesToLockItemExcludedByLossPolicy()
+	{
+		GearItem unpriced = item(1, GearSlot.HEAD, 10, 0, false, false);
+		Map<GearSlot, LoadoutSlotSelection> selections = selections();
+		selections.put(GearSlot.HEAD, LoadoutSlotSelection.locked(1));
+
+		optimizer.optimize(request(3, 0, selections), Collections.singletonList(unpriced));
 	}
 
 	private LoadoutResult optimize(List<GearItem> gear, int protectedCount, long budget)
@@ -294,5 +431,35 @@ public class LoadoutOptimizerTest
 			risk,
 			twoHanded,
 			priceKnown);
+	}
+
+	private static GearItem item(
+		int id,
+		GearSlot slot,
+		int magicDefence,
+		LossProfile lossProfile)
+	{
+		return new GearItem(
+			id,
+			"Item " + id,
+			slot,
+			magicDefence,
+			magicDefence,
+			magicDefence,
+			magicDefence,
+			magicDefence,
+			lossProfile,
+			false);
+	}
+
+	private static LossProfile exact(long cost)
+	{
+		return LossProfile.exact(
+			cost,
+			0,
+			true,
+			LossProfile.ReacquisitionMethod.QUEST_SHOP,
+			LossProfile.NonMonetaryBurden.NONE,
+			"Test value");
 	}
 }

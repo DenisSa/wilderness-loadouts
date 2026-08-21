@@ -72,13 +72,15 @@ public final class LoadoutOptimizer
 						continue;
 					}
 
-					long risk = candidate.getRiskValue();
+					long risk = candidate.getLossProfile().getCostIfUnprotected();
 					if (risk <= request.getMaxFillerRisk() - state.fillerCost)
 					{
 						next.add(state.select(slot, candidate, false, request.getFocus()));
 					}
 
-					if (!candidate.isEmpty() && state.protectedUsed < request.getProtectedLimit())
+					if (!candidate.isEmpty()
+						&& candidate.getLossProfile().canBeProtected()
+						&& state.protectedUsed < request.getProtectedLimit())
 					{
 						next.add(state.select(slot, candidate, true, request.getFocus()));
 					}
@@ -102,7 +104,13 @@ public final class LoadoutOptimizer
 			}
 		}
 
-		return new LoadoutResult(request, best.objectiveScore, best.fillerCost, best.selectedItems, best.protectedSlots);
+		return new LoadoutResult(
+			request,
+			best.objectiveScore,
+			best.fillerCost,
+			best.otherRisk,
+			best.selectedItems,
+			best.protectedSlots);
 	}
 
 	List<GearItem> preprocessCandidates(DefenceFocus focus, List<GearItem> candidates)
@@ -134,7 +142,7 @@ public final class LoadoutOptimizer
 
 		frontier.sort(Comparator
 			.comparingDouble((GearItem item) -> focus.score(item)).reversed()
-			.thenComparingLong(GearItem::getRiskValue)
+			.thenComparingLong(item -> item.getLossProfile().getCostIfUnprotected())
 			.thenComparingInt(GearItem::getItemId));
 		return frontier;
 	}
@@ -200,12 +208,23 @@ public final class LoadoutOptimizer
 		}
 		if (selection.getState() == SlotState.LOCKED)
 		{
-			return Collections.singletonList(findLockedItem(request, Collections.singletonMap(slot, owned), slot));
+			GearItem lockedItem = findLockedItem(request, Collections.singletonMap(slot, owned), slot);
+			if (!lockedItem.getLossProfile().isAutoEligible())
+			{
+				throw new IllegalArgumentException(
+					lockedItem.getName() + " cannot be used: "
+						+ lockedItem.getLossProfile().getEligibilityPolicy().getExclusionReason());
+			}
+			return Collections.singletonList(lockedItem);
 		}
 
 		List<GearItem> candidates = new ArrayList<>();
 		for (GearItem item : owned)
 		{
+			if (!item.getLossProfile().isAutoEligible())
+			{
+				continue;
+			}
 			if (slot == GearSlot.WEAPON && shieldLocked && item.isTwoHanded())
 			{
 				continue;
@@ -225,13 +244,25 @@ public final class LoadoutOptimizer
 
 		double firstScore = focus.score(first);
 		double secondScore = focus.score(second);
-		if (Double.compare(firstScore, secondScore) < 0 || first.getRiskValue() > second.getRiskValue())
+		LossProfile firstLoss = first.getLossProfile();
+		LossProfile secondLoss = second.getLossProfile();
+		if (Double.compare(firstScore, secondScore) < 0
+			|| firstLoss.getCostIfUnprotected() > secondLoss.getCostIfUnprotected())
+		{
+			return false;
+		}
+		if (secondLoss.canBeProtected()
+			&& (!firstLoss.canBeProtected()
+				|| firstLoss.getCostIfProtected() > secondLoss.getCostIfProtected()))
 		{
 			return false;
 		}
 
 		return Double.compare(firstScore, secondScore) > 0
-			|| first.getRiskValue() < second.getRiskValue()
+			|| firstLoss.getCostIfUnprotected() < secondLoss.getCostIfUnprotected()
+			|| (secondLoss.canBeProtected()
+				&& firstLoss.getCostIfProtected() < secondLoss.getCostIfProtected())
+			|| (firstLoss.canBeProtected() && !secondLoss.canBeProtected())
 			|| (first.isTwoHanded() != second.isTwoHanded() && !first.isTwoHanded())
 			|| first.getItemId() < second.getItemId();
 	}
@@ -287,12 +318,16 @@ public final class LoadoutOptimizer
 
 	private static boolean dominatesOrPreferred(State first, State second)
 	{
-		if (first.fillerCost > second.fillerCost || Double.compare(first.objectiveScore, second.objectiveScore) < 0)
+		if (first.fillerCost > second.fillerCost
+			|| first.otherRisk > second.otherRisk
+			|| Double.compare(first.objectiveScore, second.objectiveScore) < 0)
 		{
 			return false;
 		}
 
-		if (first.fillerCost < second.fillerCost || Double.compare(first.objectiveScore, second.objectiveScore) > 0)
+		if (first.fillerCost < second.fillerCost
+			|| first.otherRisk < second.otherRisk
+			|| Double.compare(first.objectiveScore, second.objectiveScore) > 0)
 		{
 			return true;
 		}
@@ -306,10 +341,15 @@ public final class LoadoutOptimizer
 		{
 			return score;
 		}
-		int risk = Long.compare(first.fillerCost, second.fillerCost);
+		int risk = Long.compare(first.totalRisk(), second.totalRisk());
 		if (risk != 0)
 		{
 			return risk;
+		}
+		int fillerRisk = Long.compare(first.fillerCost, second.fillerCost);
+		if (fillerRisk != 0)
+		{
+			return fillerRisk;
 		}
 		int protectedItems = Integer.compare(second.protectedUsed, first.protectedUsed);
 		if (protectedItems != 0)
@@ -348,6 +388,7 @@ public final class LoadoutOptimizer
 	{
 		private final int protectedUsed;
 		private final long fillerCost;
+		private final long otherRisk;
 		private final double objectiveScore;
 		private final EnumMap<GearSlot, GearItem> selectedItems;
 		private final EnumSet<GearSlot> protectedSlots;
@@ -356,6 +397,7 @@ public final class LoadoutOptimizer
 		private State(
 			int protectedUsed,
 			long fillerCost,
+			long otherRisk,
 			double objectiveScore,
 			EnumMap<GearSlot, GearItem> selectedItems,
 			EnumSet<GearSlot> protectedSlots,
@@ -363,6 +405,7 @@ public final class LoadoutOptimizer
 		{
 			this.protectedUsed = protectedUsed;
 			this.fillerCost = fillerCost;
+			this.otherRisk = otherRisk;
 			this.objectiveScore = objectiveScore;
 			this.selectedItems = selectedItems;
 			this.protectedSlots = protectedSlots;
@@ -372,6 +415,7 @@ public final class LoadoutOptimizer
 		private static State initial()
 		{
 			return new State(
+				0,
 				0,
 				0,
 				0,
@@ -394,11 +438,19 @@ public final class LoadoutOptimizer
 
 			return new State(
 				protectedUsed + (protect ? 1 : 0),
-				fillerCost + (protect ? 0 : item.getRiskValue()),
+				fillerCost + (protect ? 0 : item.getLossProfile().getCostIfUnprotected()),
+				otherRisk + (protect ? item.getLossProfile().getCostIfProtected() : 0),
 				objectiveScore + focus.score(item),
 				items,
 				protectedCopy,
 				twoHandedWeaponSelected || (slot == GearSlot.WEAPON && item.isTwoHanded()));
+		}
+
+		private long totalRisk()
+		{
+			return fillerCost > Long.MAX_VALUE - otherRisk
+				? Long.MAX_VALUE
+				: fillerCost + otherRisk;
 		}
 	}
 

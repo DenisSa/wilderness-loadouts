@@ -135,7 +135,7 @@ def build_values(
     items: Mapping[str, GamevalItem],
     low_tier_names: Set[str],
     high_tier_names: Set[str],
-) -> Tuple[Mapping[int, Tuple[str, int]], Mapping[int, str]]:
+) -> Tuple[Mapping[int, Tuple[str, int]], Mapping[int, str], Mapping[int, str]]:
     locked_items = [
         item
         for item in items.values()
@@ -149,6 +149,7 @@ def build_values(
 
     values: Dict[int, Tuple[str, int]] = {}
     excluded_legacy: Dict[int, str] = {}
+    unlocked_capable: Dict[int, str] = {}
     covered_low: Set[str] = set()
     covered_high: Set[str] = set()
     for item in locked_items:
@@ -156,6 +157,7 @@ def build_values(
         is_cache_mangled = item.constant in mangled_normal_constants
         if name in high_tier_names or is_cache_mangled:
             values[item.item_id] = (item.constant, DEEP_WILDERNESS_REPAIR_COST)
+            add_unlocked_variant(items, item, unlocked_capable)
             if name in high_tier_names:
                 covered_high.add(name)
             continue
@@ -163,6 +165,7 @@ def build_values(
         if name not in low_tier_names:
             continue
         excluded_legacy[item.item_id] = item.constant
+        add_unlocked_variant(items, item, unlocked_capable)
         covered_low.add(name)
 
     missing_low = sorted(low_tier_names - covered_low)
@@ -178,7 +181,24 @@ def build_values(
         raise ValueError("No Trouver risk values were generated")
     if not excluded_legacy:
         raise ValueError("No legacy low-tier Trouver IDs were generated")
-    return values, excluded_legacy
+    if not unlocked_capable:
+        raise ValueError("No unlocked Trouver-capable IDs were generated")
+    return values, excluded_legacy, unlocked_capable
+
+
+def add_unlocked_variant(
+    items: Mapping[str, GamevalItem],
+    locked_item: GamevalItem,
+    unlocked_capable: Dict[int, str],
+) -> None:
+    unlocked_constant = locked_item.constant.removesuffix("_TROUVER")
+    unlocked_item = items.get(unlocked_constant)
+    if unlocked_item is None:
+        raise ValueError(
+            f"Could not find unlocked variant {unlocked_constant} for "
+            f"{locked_item.constant}"
+        )
+    unlocked_capable[unlocked_item.item_id] = unlocked_item.constant
 
 
 def grouped_constants(values: Mapping[int, Tuple[str, int]]) -> Iterable[Tuple[int, List[str]]]:
@@ -192,6 +212,7 @@ def grouped_constants(values: Mapping[int, Tuple[str, int]]) -> Iterable[Tuple[i
 def render_java(
     values: Mapping[int, Tuple[str, int]],
     excluded_legacy: Mapping[int, str],
+    unlocked_capable: Mapping[int, str],
     runelite_revision: str,
     jagex_hash: str,
 ) -> str:
@@ -206,6 +227,12 @@ def render_java(
         for constant in sorted(excluded_legacy.values())
     ]
     legacy_cases.append("\t\t\t\treturn true;")
+
+    unlocked_cases = [
+        f"\t\t\tcase ItemID.{constant}:"
+        for constant in sorted(unlocked_capable.values())
+    ]
+    unlocked_cases.append("\t\t\t\treturn true;")
 
     return f"""/*
  * Copyright (c) 2026, DenisSa
@@ -265,6 +292,16 @@ final class TrouverRiskValues
 \t\t\t\treturn false;
 \t\t}}
 \t}}
+
+\tstatic boolean isUnlockedTrouverCapable(int itemId)
+\t{{
+\t\tswitch (itemId)
+\t\t{{
+{chr(10).join(unlocked_cases)}
+\t\t\tdefault:
+\t\t\t\treturn false;
+\t\t}}
+\t}}
 }}
 """
 
@@ -279,7 +316,7 @@ def generate() -> str:
         jagex_page,
         "For clarity, these 'higher tier' items are as follows:",
     )
-    values, excluded_legacy = build_values(
+    values, excluded_legacy, unlocked_capable = build_values(
         parse_gameval_items(item_source),
         low_tier_names,
         high_tier_names,
@@ -290,7 +327,13 @@ def generate() -> str:
         + [f"high={name}" for name in sorted(high_tier_names)]
     )
     jagex_hash = hashlib.sha256(jagex_input.encode("utf-8")).hexdigest()
-    return render_java(values, excluded_legacy, runelite_revision, jagex_hash)
+    return render_java(
+        values,
+        excluded_legacy,
+        unlocked_capable,
+        runelite_revision,
+        jagex_hash,
+    )
 
 
 def main() -> int:

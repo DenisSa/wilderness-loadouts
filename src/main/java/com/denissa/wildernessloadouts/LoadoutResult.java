@@ -35,7 +35,7 @@ public final class LoadoutResult
 	private final DefenceFocus focus;
 	private final double objectiveScore;
 	private final long fillerRisk;
-	private final long maxFillerRisk;
+	private final long otherRisk;
 	private final Map<GearSlot, GearItem> selectedItems;
 	private final Set<GearSlot> protectedSlots;
 	private final int totalStabDefence;
@@ -43,19 +43,20 @@ public final class LoadoutResult
 	private final int totalCrushDefence;
 	private final int totalMagicDefence;
 	private final int totalRangedDefence;
-	private final boolean unpricedItemsSelected;
+	private final boolean nonMonetaryBurdenSelected;
 
 	LoadoutResult(
 		LoadoutRequest request,
 		double objectiveScore,
 		long fillerRisk,
+		long otherRisk,
 		Map<GearSlot, GearItem> selectedItems,
 		Set<GearSlot> protectedSlots)
 	{
 		this.focus = request.getFocus();
 		this.objectiveScore = objectiveScore;
 		this.fillerRisk = fillerRisk;
-		this.maxFillerRisk = request.getMaxFillerRisk();
+		this.otherRisk = otherRisk;
 		this.selectedItems = Collections.unmodifiableMap(new EnumMap<>(selectedItems));
 		this.protectedSlots = Collections.unmodifiableSet(
 			protectedSlots.isEmpty() ? EnumSet.noneOf(GearSlot.class) : EnumSet.copyOf(protectedSlots));
@@ -65,7 +66,7 @@ public final class LoadoutResult
 		int crush = 0;
 		int magic = 0;
 		int ranged = 0;
-		boolean unpriced = false;
+		boolean nonMonetaryBurden = false;
 		for (GearItem item : selectedItems.values())
 		{
 			if (item.isEmpty())
@@ -77,14 +78,14 @@ public final class LoadoutResult
 			crush += item.getCrushDefence();
 			magic += item.getMagicDefence();
 			ranged += item.getRangedDefence();
-			unpriced |= !item.isPriceKnown();
+			nonMonetaryBurden |= item.getLossProfile().hasNonMonetaryBurden();
 		}
 		this.totalStabDefence = stab;
 		this.totalSlashDefence = slash;
 		this.totalCrushDefence = crush;
 		this.totalMagicDefence = magic;
 		this.totalRangedDefence = ranged;
-		this.unpricedItemsSelected = unpriced;
+		this.nonMonetaryBurdenSelected = nonMonetaryBurden;
 	}
 
 	public DefenceFocus getFocus()
@@ -102,14 +103,16 @@ public final class LoadoutResult
 		return fillerRisk;
 	}
 
-	public long getMaxFillerRisk()
+	public long getOtherRisk()
 	{
-		return maxFillerRisk;
+		return otherRisk;
 	}
 
-	public long getRemainingRisk()
+	public long getTotalRisk()
 	{
-		return maxFillerRisk - fillerRisk;
+		return fillerRisk > Long.MAX_VALUE - otherRisk
+			? Long.MAX_VALUE
+			: fillerRisk + otherRisk;
 	}
 
 	public Map<GearSlot, GearItem> getSelectedItems()
@@ -162,8 +165,8 @@ public final class LoadoutResult
 		return (totalStabDefence + totalSlashDefence + totalCrushDefence) / 3.0;
 	}
 
-	public boolean hasUnpricedItemsSelected()
+	public boolean hasNonMonetaryBurdenSelected()
 	{
-		return unpricedItemsSelected;
+		return nonMonetaryBurdenSelected;
 	}
 }

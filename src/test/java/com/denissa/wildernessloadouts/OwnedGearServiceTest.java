@@ -29,6 +29,7 @@ import net.runelite.api.gameval.ItemID;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public class OwnedGearServiceTest
@@ -44,19 +45,123 @@ public class OwnedGearServiceTest
 	}
 
 	@Test
-	public void excludesLegacyLowTierTrouverVariants()
+	public void excludesLegacyLowTierTrouverVariantsRegardlessOfMarketPrice()
 	{
-		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 0));
-		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE_TROUVER, 999_999));
-		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE, 0));
-		assertEquals(12_345L, OwnedGearService.resolveRiskValue(ItemID.MA2_ZAMORAK_CAPE, 12_345));
-		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.TZHAAR_CAPE_FIRE_TROUVER, 999_999));
+		LossProfile profile = LossProfileResolver.resolve(
+			ItemID.MA2_ZAMORAK_CAPE_TROUVER,
+			ignored -> 999_999);
+
+		assertFalse(profile.isAutoEligible());
+		assertEquals(LossProfile.EligibilityPolicy.LEGACY_TROUVER, profile.getEligibilityPolicy());
 	}
 
 	@Test
 	public void usesConservativeDeepWildernessFeeForHighTierTrouverItems()
 	{
-		assertEquals(500_000L, OwnedGearService.resolveRiskValue(ItemID.GAME_PEST_MELEE_HELM_TROUVER, 0));
-		assertEquals(0L, OwnedGearService.resolveRiskValue(ItemID.GAME_PEST_MELEE_HELM, 0));
+		LossProfile locked = LossProfileResolver.resolve(
+			ItemID.GAME_PEST_MELEE_HELM_TROUVER,
+			ignored -> 0);
+		LossProfile unlocked = LossProfileResolver.resolve(
+			ItemID.GAME_PEST_MELEE_HELM,
+			ignored -> 0);
+
+		assertTrue(locked.isAutoEligible());
+		assertEquals(500_000L, locked.getCostIfUnprotected());
+		assertEquals(0L, locked.getCostIfProtected());
+		assertEquals(LossProfile.ReacquisitionMethod.TROUVER_REPAIR, locked.getReacquisitionMethod());
+		assertFalse(unlocked.isAutoEligible());
+		assertEquals(LossProfile.EligibilityPolicy.UNLOCKED_TROUVER, unlocked.getEligibilityPolicy());
+	}
+
+	@Test
+	public void suppliesExactQuestShopAndNpcReplacementValues()
+	{
+		LossProfile barrowsGloves = LossProfileResolver.resolve(
+			ItemID.HUNDRED_GAUNTLETS_LEVEL_10,
+			ignored -> 0);
+		LossProfile mythicalCape = LossProfileResolver.resolve(ItemID.MYTHICAL_CAPE, ignored -> 0);
+		LossProfile ringOfShadows = LossProfileResolver.resolve(ItemID.RING_OF_SHADOWS, ignored -> 0);
+
+		assertEquals(130_000L, barrowsGloves.getCostIfUnprotected());
+		assertEquals(10_000L, mythicalCape.getCostIfUnprotected());
+		assertEquals(75_000L, ringOfShadows.getCostIfUnprotected());
+		assertTrue(ringOfShadows.hasNonMonetaryBurden());
+	}
+
+	@Test
+	public void modelsLunarEquipmentAsAlwaysLostAtPerduPrice()
+	{
+		LossProfile lunarRing = LossProfileResolver.resolve(ItemID.LUNAR_RING, ignored -> 0);
+
+		assertEquals(8_000L, lunarRing.getCostIfUnprotected());
+		assertEquals(8_000L, lunarRing.getCostIfProtected());
+		assertFalse(lunarRing.canBeProtected());
+		assertEquals(LossProfile.ReacquisitionMethod.PERDU, lunarRing.getReacquisitionMethod());
+	}
+
+	@Test
+	public void modelsImbuedRingOfWealthResidualLossWhenProtected()
+	{
+		LossProfile profile = LossProfileResolver.resolve(ItemID.RING_OF_WEALTH_I, itemId ->
+		{
+			if (itemId == ItemID.RING_OF_WEALTH)
+			{
+				return 12_000;
+			}
+			if (itemId == ItemID.BH_IMBUE_RINGOFWEALTH)
+			{
+				return 4_500;
+			}
+			return 0;
+		});
+
+		assertEquals(66_500L, profile.getCostIfUnprotected());
+		assertEquals(50_000L, profile.getCostIfProtected());
+		assertTrue(profile.canBeProtected());
+	}
+
+	@Test
+	public void excludesImbuedRingOfWealthWhenAComponentPriceIsUnavailable()
+	{
+		LossProfile profile = LossProfileResolver.resolve(ItemID.RING_OF_WEALTH_I, ignored -> 0);
+
+		assertFalse(profile.isAutoEligible());
+		assertEquals(LossProfile.EligibilityPolicy.REPLACEMENT_UNKNOWN, profile.getEligibilityPolicy());
+	}
+
+	@Test
+	public void recordsChargedWardBurdenAlongsideMarketReplacement()
+	{
+		LossProfile profile = LossProfileResolver.resolve(ItemID.DRAGONFIRE_WARD, ignored -> 2_000_000);
+
+		assertTrue(profile.isAutoEligible());
+		assertEquals(2_000_000L, profile.getCostIfUnprotected());
+		assertEquals(LossProfile.NonMonetaryBurden.CHARGES, profile.getNonMonetaryBurden());
+		assertEquals(LossProfile.Confidence.MARKET_ESTIMATE, profile.getConfidence());
+	}
+
+	@Test
+	public void leavesTimeOnlyAndUnknownItemsVisibleButIneligible()
+	{
+		LossProfile salve = LossProfileResolver.resolve(
+			ItemID.LOTR_CRYSTALSHARD_NECKLACE_UPGRADE,
+			ignored -> 0);
+		LossProfile unknown = LossProfileResolver.resolve(123_456, ignored -> 0);
+
+		assertFalse(salve.isAutoEligible());
+		assertEquals(LossProfile.EligibilityPolicy.TIME_ONLY, salve.getEligibilityPolicy());
+		assertFalse(unknown.isAutoEligible());
+		assertEquals(LossProfile.EligibilityPolicy.REPLACEMENT_UNKNOWN, unknown.getEligibilityPolicy());
+	}
+
+	@Test
+	public void fallsBackToRuneLiteMarketPrice()
+	{
+		LossProfile profile = LossProfileResolver.resolve(123_456, ignored -> 42_000);
+
+		assertNotNull(profile);
+		assertTrue(profile.isAutoEligible());
+		assertEquals(42_000L, profile.getCostIfUnprotected());
+		assertEquals(LossProfile.Confidence.MARKET_ESTIMATE, profile.getConfidence());
 	}
 }

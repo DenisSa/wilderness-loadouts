@@ -1,0 +1,51 @@
+{
+  "sources": {
+    "culinaromancer": {
+      "label": "OSRS Wiki: Culinaromancer's Chest",
+      "url": "https://oldschool.runescape.wiki/w/Culinaromancer%27s_Chest"
+    },
+    "lost_property": {
+      "label": "OSRS Wiki: Lost Property shop",
+      "url": "https://oldschool.runescape.wiki/w/Lost_quest_items"
+    },
+    "mythical_cape": {
+      "label": "OSRS Wiki: Mythical cape",
+      "url": "https://oldschool.runescape.wiki/w/Mythical_cape"
+    },
+    "ring_of_shadows": {
+      "label": "OSRS Wiki: Ring of shadows",
+      "url": "https://oldschool.runescape.wiki/w/Ring_of_shadows"
+    }
+  },
+  "items": [
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_1", "name": "Hardleather gloves", "cost": 65, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_2", "name": "Bronze gloves", "cost": 130, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_3", "name": "Iron gloves", "cost": 325, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_4", "name": "Steel gloves", "cost": 650, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_5", "name": "Black gloves", "cost": 1300, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_6", "name": "Mithril gloves", "cost": 1950, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_7", "name": "Adamant gloves", "cost": 3250, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_8", "name": "Rune gloves", "cost": 6500, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_9", "name": "Dragon gloves", "cost": 130000, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+    {"constant": "HUNDRED_GAUNTLETS_LEVEL_10", "name": "Barrows gloves", "cost": 130000, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "culinaromancer"},
+
+    {"constant": "MYTHICAL_CAPE", "name": "Mythical cape", "cost": 10000, "protected_cost": 0, "protectable": true, "method": "QUEST_SHOP", "burden": "NONE", "source": "mythical_cape"},
+    {"constant": "RING_OF_SHADOWS", "name": "Ring of shadows", "cost": 75000, "protected_cost": 0, "protectable": true, "method": "NPC_REPLACEMENT", "burden": "CHARGES", "source": "ring_of_shadows"},
+    {"constant": "RING_OF_SHADOWS_UNCHARGED", "name": "Ring of shadows (uncharged)", "cost": 75000, "protected_cost": 0, "protectable": true, "method": "NPC_REPLACEMENT", "burden": "NONE", "source": "ring_of_shadows"},
+
+    {"constant": "LUNAR_MOONCLAN_LIMINAL_STAFF", "name": "Lunar staff", "cost": 60000, "protected_cost": 60000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_HELMET", "name": "Lunar helm", "cost": 22000, "protected_cost": 22000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_TORSO", "name": "Lunar torso", "cost": 140000, "protected_cost": 140000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_LEGS", "name": "Lunar legs", "cost": 95000, "protected_cost": 95000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_GLOVES", "name": "Lunar gloves", "cost": 15000, "protected_cost": 15000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_BOOTS", "name": "Lunar boots", "cost": 15000, "protected_cost": 15000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_CAPE", "name": "Lunar cape", "cost": 18000, "protected_cost": 18000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_AMULET", "name": "Lunar amulet", "cost": 9000, "protected_cost": 9000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUNAR_RING", "name": "Lunar ring", "cost": 8000, "protected_cost": 8000, "protectable": false, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+
+    {"constant": "LUMBRIDGE_RING_EASY", "name": "Explorer's ring 1", "source_name": "Explorer's ring", "cost": 200, "protected_cost": 0, "protectable": true, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUMBRIDGE_RING_MEDIUM", "name": "Explorer's ring 2", "source_name": "Explorer's ring", "cost": 200, "protected_cost": 0, "protectable": true, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUMBRIDGE_RING_HARD", "name": "Explorer's ring 3", "source_name": "Explorer's ring", "cost": 200, "protected_cost": 0, "protectable": true, "method": "PERDU", "burden": "NONE", "source": "lost_property"},
+    {"constant": "LUMBRIDGE_RING_ELITE", "name": "Explorer's ring 4", "source_name": "Explorer's ring", "cost": 200, "protected_cost": 0, "protectable": true, "method": "PERDU", "burden": "NONE", "source": "lost_property"}
+  ]
+}

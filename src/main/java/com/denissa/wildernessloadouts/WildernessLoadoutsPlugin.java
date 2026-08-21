@@ -40,7 +40,6 @@ import net.runelite.api.ItemContainer;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.gameval.InventoryID;
-import net.runelite.api.gameval.ItemID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
@@ -51,6 +50,7 @@ import net.runelite.client.plugins.PluginInstantiationException;
 import net.runelite.client.plugins.banktags.BankTagsPlugin;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ImageUtil;
 
 @PluginDescriptor(
 	name = "Wilderness Loadouts",
@@ -99,7 +99,7 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 		});
 
 		panel = new WildernessLoadoutsPanel(itemManager, this);
-		BufferedImage icon = itemManager.getImage(ItemID.DRAGON_SQ_SHIELD);
+		BufferedImage icon = ImageUtil.loadImageResource(WildernessLoadoutsPlugin.class, "xerician_hat.png");
 		navigationButton = NavigationButton.builder()
 			.tooltip("Wilderness Loadouts")
 			.icon(icon)

@@ -63,14 +63,19 @@ public class WildernessLoadoutsPanel extends PluginPanel
 {
 	private static final Color LOCKED_COLOR = new Color(90, 170, 230);
 	private static final int ALTERNATIVE_LIMIT = 12;
+	private static final String UNAVAILABLE_ITEMS_TOOLTIP =
+		"<html>Auto excludes items it cannot price safely or use in their current state.<br>"
+			+ "This includes unknown or time-only replacement costs and unsupported Trouver variants.<br>"
+			+ "Open an equipment slot to see the item-specific reason.</html>";
 
 	private final ItemManager itemManager;
 	private final Listener listener;
 	private final JComboBox<DefenceFocus> focusSelector = new JComboBox<>(DefenceFocus.values());
-	private final JRadioButton protectedNone = new JRadioButton("High risk (0)");
+	private final JRadioButton protectedNone = new JRadioButton("0");
+	private final JRadioButton protectedOne = new JRadioButton("1");
 	private final JRadioButton protectedThree = new JRadioButton("3", true);
 	private final JRadioButton protectedFour = new JRadioButton("4");
-	private final JTextField riskField = new JTextField("500k");
+	private final JTextField riskField = new JTextField("100k");
 	private final JButton showInBankButton = new JButton("Show in Bank");
 	private final JLabel statusLabel = new JLabel();
 	private final JPanel resultPanel = new JPanel();
@@ -93,8 +98,10 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		{
 			slotSelections.put(slot, LoadoutSlotSelection.auto());
 		}
+		focusSelector.setSelectedItem(DefenceFocus.MAGIC);
 		focusSelector.addActionListener(event -> requestRecalculate());
 		protectedNone.addActionListener(event -> requestRecalculate());
+		protectedOne.addActionListener(event -> requestRecalculate());
 		protectedThree.addActionListener(event -> requestRecalculate());
 		protectedFour.addActionListener(event -> requestRecalculate());
 		riskField.getDocument().addDocumentListener(new DocumentListener()
@@ -139,8 +146,8 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 		JLabel disclaimer = new JLabel(
 			"<html><small>Protected/core items are assumed protected for loadout planning. "
-				+ "High risk protects none. Risk uses RuneLite prices and deep-Wilderness repair fees "
-				+ "for items physically locked with Trouver parchment.</small></html>");
+				+ "Selecting 0 protects none. Risk measures replacement liability using market prices, "
+				+ "exact reclaim costs, and deep-Wilderness Trouver fees.</small></html>");
 		disclaimer.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		add(disclaimer);
 
@@ -209,17 +216,13 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		showStatus("Loadout ready.", false);
 
 		resultPanel.removeAll();
-		JPanel summary = new JPanel(new GridLayout(0, 1, 0, 2));
+		JPanel summary = new JPanel(new GridLayout(0, 1, 0, 0));
 		summary.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		summary.setBorder(new EmptyBorder(6, 6, 6, 6));
-		summary.add(valueLabel(result.getFocus().toString(), formatScore(result.getObjectiveScore())));
 		summary.add(detailLabel("Magic Defence", formatSigned(result.getTotalMagicDefence())));
 		summary.add(detailLabel("Ranged Defence", formatSigned(result.getTotalRangedDefence())));
 		summary.add(detailLabel("Avg Melee Defence", formatSigned(result.getAverageMeleeDefence())));
-		summary.add(detailLabel(
-			"Filler risk",
-			formatGp(result.getFillerRisk()) + " / " + formatGp(result.getMaxFillerRisk())));
-		summary.add(detailLabel("Remaining", formatGp(result.getRemainingRisk())));
+		summary.add(detailLabel("Total Risk", formatGp(result.getTotalRisk())));
 		resultPanel.add(summary, BorderLayout.NORTH);
 
 		JPanel equipmentGrid = new JPanel(new GridLayout(0, 2, 4, 4));
@@ -232,10 +235,33 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 		JPanel actions = new JPanel(new GridLayout(0, 1, 0, 4));
 		actions.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		if (result.hasUnpricedItemsSelected())
+		long excludedItems = ownedGear.stream()
+			.filter(item -> !item.getLossProfile().isAutoEligible())
+			.count();
+		if (excludedItems > 0)
 		{
-			JLabel warning = new JLabel("<html>Some items are unpriced; displayed risk may be incomplete.</html>");
-			warning.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
+			String itemLabel = excludedItems == 1 ? "item" : "items";
+			JLabel note = new JLabel(excludedItems + " owned " + itemLabel + " unavailable");
+			note.setForeground(ColorScheme.PROGRESS_INPROGRESS_COLOR);
+			note.setToolTipText(UNAVAILABLE_ITEMS_TOOLTIP);
+
+			JLabel info = new JLabel("ⓘ");
+			info.setForeground(ColorScheme.PROGRESS_INPROGRESS_COLOR);
+			info.setHorizontalAlignment(SwingConstants.CENTER);
+			info.setPreferredSize(new Dimension(18, 18));
+			info.setToolTipText(UNAVAILABLE_ITEMS_TOOLTIP);
+
+			JPanel unavailableNote = new JPanel(new BorderLayout(4, 0));
+			unavailableNote.setBackground(ColorScheme.DARK_GRAY_COLOR);
+			unavailableNote.add(note, BorderLayout.CENTER);
+			unavailableNote.add(info, BorderLayout.EAST);
+			actions.add(unavailableNote);
+		}
+		if (result.hasNonMonetaryBurdenSelected())
+		{
+			JLabel warning = new JLabel(
+				"<html>Selected items have charges or reacquisition work not included in GP risk.</html>");
+			warning.setForeground(ColorScheme.PROGRESS_INPROGRESS_COLOR);
 			actions.add(warning);
 		}
 		actions.add(showInBankButton);
@@ -249,11 +275,13 @@ public class WildernessLoadoutsPanel extends PluginPanel
 	{
 		ButtonGroup group = new ButtonGroup();
 		group.add(protectedNone);
+		group.add(protectedOne);
 		group.add(protectedThree);
 		group.add(protectedFour);
-		JPanel panel = new JPanel(new GridLayout(1, 3));
+		JPanel panel = new JPanel(new GridLayout(1, 4));
 		panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		panel.add(protectedNone);
+		panel.add(protectedOne);
 		panel.add(protectedThree);
 		panel.add(protectedFour);
 		return panel;
@@ -301,7 +329,9 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		button.setBorder(BorderFactory.createLineBorder(
 			protectedItem ? ColorScheme.BRAND_ORANGE : (locked ? LOCKED_COLOR : ColorScheme.MEDIUM_GRAY_COLOR),
 			protectedItem || locked ? 2 : 1));
-		button.setToolTipText(buildItemTooltip(item, result.getFocus()));
+		button.setToolTipText(item == null || item.isEmpty()
+			? buildEmptySlotTooltip(slot)
+			: buildItemTooltip(item, result.getFocus()));
 		button.addActionListener(event -> showAlternatives(slot));
 		if (item != null && !item.isEmpty())
 		{
@@ -322,9 +352,11 @@ public class WildernessLoadoutsPanel extends PluginPanel
 			}
 		}
 		candidates.sort(Comparator
+			.comparing((GearItem item) -> !item.getLossProfile().isAutoEligible())
+			.thenComparing(Comparator
 			.comparingDouble((GearItem item) -> focus.score(item)).reversed()
-			.thenComparingLong(GearItem::getRiskValue)
-			.thenComparingInt(GearItem::getItemId));
+			.thenComparingLong(item -> item.getLossProfile().getCostIfUnprotected())
+			.thenComparingInt(GearItem::getItemId)));
 		if (candidates.size() > ALTERNATIVE_LIMIT)
 		{
 			candidates = new ArrayList<>(candidates.subList(0, ALTERNATIVE_LIMIT));
@@ -360,6 +392,14 @@ public class WildernessLoadoutsPanel extends PluginPanel
 			if (selected == null)
 			{
 				showStatus("No owned item is available to lock in that slot.", true);
+				return;
+			}
+			if (!selected.getLossProfile().isAutoEligible())
+			{
+				showStatus(
+					selected.getName() + " is excluded: "
+						+ selected.getLossProfile().getEligibilityPolicy().getExclusionReason(),
+					true);
 				return;
 			}
 			setSlotSelection(slot, LoadoutSlotSelection.locked(selected.getItemId()));
@@ -411,7 +451,9 @@ public class WildernessLoadoutsPanel extends PluginPanel
 	private LoadoutRequest buildRequest()
 	{
 		DefenceFocus focus = (DefenceFocus) focusSelector.getSelectedItem();
-		int protectedLimit = protectedNone.isSelected() ? 0 : (protectedFour.isSelected() ? 4 : 3);
+		int protectedLimit = protectedNone.isSelected()
+			? 0
+			: (protectedOne.isSelected() ? 1 : (protectedFour.isSelected() ? 4 : 3));
 		long budget = RiskBudgetParser.parse(riskField.getText());
 		return new LoadoutRequest(focus, protectedLimit, budget, slotSelections);
 	}
@@ -421,14 +463,6 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		JLabel label = new JLabel(text);
 		label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		return label;
-	}
-
-	private static JLabel valueLabel(String label, String value)
-	{
-		JLabel result = new JLabel(
-			"<html><b>" + escapeHtml(label) + "</b><br><font size='+1'>" + escapeHtml(value) + "</font></html>");
-		result.setForeground(Color.WHITE);
-		return result;
 	}
 
 	private static JLabel detailLabel(String label, String value)
@@ -449,7 +483,24 @@ public class WildernessLoadoutsPanel extends PluginPanel
 			+ " | Magic " + item.getMagicDefence()
 			+ " | Ranged " + item.getRangedDefence()
 			+ " | Melee " + formatScore(item.getMeleeDefence())
-			+ " | " + formatPrice(item);
+			+ " | " + formatPrice(item)
+			+ formatProtectedLoss(item.getLossProfile())
+			+ " | " + item.getLossProfile().getSource();
+	}
+
+	private String buildEmptySlotTooltip(GearSlot slot)
+	{
+		long eligible = latestOwnedGear.stream()
+			.filter(item -> item.getSlot() == slot && item.getLossProfile().isAutoEligible())
+			.count();
+		long excluded = latestOwnedGear.stream()
+			.filter(item -> item.getSlot() == slot && !item.getLossProfile().isAutoEligible())
+			.count();
+		if (eligible == 0 && excluded > 0)
+		{
+			return excluded + " owned alternative(s) excluded by the loss policy; click for details";
+		}
+		return "Click to choose Auto, Empty, or lock an owned alternative";
 	}
 
 	private static String formatScore(double value)
@@ -473,13 +524,42 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 	private static String formatPrice(GearItem item)
 	{
-		if (!item.isPriceKnown())
+		LossProfile profile = item.getLossProfile();
+		if (!profile.isAutoEligible())
 		{
-			return "unpriced";
+			return "excluded: " + profile.getEligibilityPolicy().getExclusionReason();
 		}
-		return item.isTrouverRepairValue()
-			? "repair " + formatGp(item.getRiskValue())
-			: "~" + formatGp(item.getRiskValue());
+		String cost = formatGp(profile.getCostIfUnprotected());
+		String displayedCost = profile.getConfidence() == LossProfile.Confidence.MARKET_ESTIMATE
+			? "~" + cost
+			: cost;
+		String value;
+		if (!profile.canBeProtected())
+		{
+			value = "always lost " + displayedCost;
+		}
+		else if (profile.getReacquisitionMethod() == LossProfile.ReacquisitionMethod.MARKET)
+		{
+			value = displayedCost;
+		}
+		else
+		{
+			value = profile.getReacquisitionMethod().getDisplayName() + " " + displayedCost;
+		}
+		if (profile.hasNonMonetaryBurden())
+		{
+			value += "; " + profile.getNonMonetaryBurden().getDisplayName();
+		}
+		return value;
+	}
+
+	private static String formatProtectedLoss(LossProfile profile)
+	{
+		if (!profile.canBeProtected() || profile.getCostIfProtected() <= 0)
+		{
+			return "";
+		}
+		return " | protected loss " + formatGp(profile.getCostIfProtected());
 	}
 
 	private static String shorten(String value, int maxLength)
@@ -529,7 +609,8 @@ public class WildernessLoadoutsPanel extends PluginPanel
 					+ " | M " + item.getMagicDefence()
 					+ " R " + item.getRangedDefence()
 					+ " Melee " + formatScore(item.getMeleeDefence())
-					+ " | " + formatPrice(item));
+					+ " | " + formatPrice(item)
+					+ formatProtectedLoss(item.getLossProfile()));
 			details.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 			setBackground(selected ? ColorScheme.MEDIUM_GRAY_COLOR : ColorScheme.DARKER_GRAY_COLOR);
 			return this;

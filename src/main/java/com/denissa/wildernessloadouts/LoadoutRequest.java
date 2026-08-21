@@ -43,9 +43,9 @@ public final class LoadoutRequest
 		Map<GearSlot, LoadoutSlotSelection> slotSelections)
 	{
 		this.focus = Objects.requireNonNull(focus);
-		if (protectedLimit != 0 && protectedLimit != 3 && protectedLimit != 4)
+		if (protectedLimit != 0 && protectedLimit != 1 && protectedLimit != 3 && protectedLimit != 4)
 		{
-			throw new IllegalArgumentException("Protected/core items must be 0, 3, or 4");
+			throw new IllegalArgumentException("Protected/core items must be 0, 1, 3, or 4");
 		}
 		if (maxFillerRisk < 0)
 		{

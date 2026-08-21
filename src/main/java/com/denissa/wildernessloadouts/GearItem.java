@@ -36,11 +36,37 @@ public final class GearItem
 	private final int crushDefence;
 	private final int magicDefence;
 	private final int rangedDefence;
-	private final long riskValue;
+	private final LossProfile lossProfile;
 	private final boolean twoHanded;
-	private final boolean priceKnown;
-	private final boolean trouverRepairValue;
 
+	public GearItem(
+		int itemId,
+		String name,
+		GearSlot slot,
+		int stabDefence,
+		int slashDefence,
+		int crushDefence,
+		int magicDefence,
+		int rangedDefence,
+		LossProfile lossProfile,
+		boolean twoHanded)
+	{
+		this.itemId = itemId;
+		this.name = Objects.requireNonNull(name);
+		this.slot = Objects.requireNonNull(slot);
+		this.stabDefence = stabDefence;
+		this.slashDefence = slashDefence;
+		this.crushDefence = crushDefence;
+		this.magicDefence = magicDefence;
+		this.rangedDefence = rangedDefence;
+		this.lossProfile = Objects.requireNonNull(lossProfile);
+		this.twoHanded = twoHanded;
+	}
+
+	/**
+	 * Convenience constructor retained for optimizer fixtures and simple market
+	 * candidates. Production item discovery supplies a full loss profile.
+	 */
 	public GearItem(
 		int itemId,
 		String name,
@@ -63,43 +89,13 @@ public final class GearItem
 			crushDefence,
 			magicDefence,
 			rangedDefence,
-			riskValue,
-			twoHanded,
-			priceKnown,
-			false);
-	}
-
-	public GearItem(
-		int itemId,
-		String name,
-		GearSlot slot,
-		int stabDefence,
-		int slashDefence,
-		int crushDefence,
-		int magicDefence,
-		int rangedDefence,
-		long riskValue,
-		boolean twoHanded,
-		boolean priceKnown,
-		boolean trouverRepairValue)
-	{
-		this.itemId = itemId;
-		this.name = Objects.requireNonNull(name);
-		this.slot = Objects.requireNonNull(slot);
-		this.stabDefence = stabDefence;
-		this.slashDefence = slashDefence;
-		this.crushDefence = crushDefence;
-		this.magicDefence = magicDefence;
-		this.rangedDefence = rangedDefence;
-		this.riskValue = Math.max(0, riskValue);
-		this.twoHanded = twoHanded;
-		this.priceKnown = priceKnown || trouverRepairValue;
-		this.trouverRepairValue = trouverRepairValue;
+			priceKnown ? LossProfile.estimate(riskValue) : LossProfile.unknown(),
+			twoHanded);
 	}
 
 	public static GearItem empty(GearSlot slot)
 	{
-		return new GearItem(-1, "Empty", slot, 0, 0, 0, 0, 0, 0, false, true);
+		return new GearItem(-1, "Empty", slot, 0, 0, 0, 0, 0, LossProfile.estimate(0), false);
 	}
 
 	public int getItemId()
@@ -142,24 +138,14 @@ public final class GearItem
 		return rangedDefence;
 	}
 
-	public long getRiskValue()
+	public LossProfile getLossProfile()
 	{
-		return riskValue;
+		return lossProfile;
 	}
 
 	public boolean isTwoHanded()
 	{
 		return twoHanded;
-	}
-
-	public boolean isPriceKnown()
-	{
-		return priceKnown;
-	}
-
-	public boolean isTrouverRepairValue()
-	{
-		return trouverRepairValue;
 	}
 
 	public boolean isEmpty()

@@ -113,6 +113,22 @@ public class LoadoutOptimizerTest
 	}
 
 	@Test
+	public void highRiskModeProtectsNothingAndPricesEveryItem()
+	{
+		List<GearItem> gear = Arrays.asList(
+			item(1, GearSlot.HEAD, 20, 60),
+			item(2, GearSlot.CAPE, 10, 60));
+
+		LoadoutResult result = optimize(gear, 0, 100);
+
+		assertEquals(20.0, result.getObjectiveScore(), 0.0001);
+		assertEquals(60, result.getFillerRisk());
+		assertTrue(result.getProtectedSlots().isEmpty());
+		assertEquals(1, result.getSelectedItem(GearSlot.HEAD).getItemId());
+		assertTrue(result.getSelectedItem(GearSlot.CAPE).isEmpty());
+	}
+
+	@Test
 	public void findsGlobalMultiSlotOptimum()
 	{
 		List<GearItem> gear = withCore(

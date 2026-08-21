@@ -50,7 +50,10 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
@@ -64,29 +67,57 @@ public class WildernessLoadoutsPanel extends PluginPanel
 	private final ItemManager itemManager;
 	private final Listener listener;
 	private final JComboBox<DefenceFocus> focusSelector = new JComboBox<>(DefenceFocus.values());
+	private final JRadioButton protectedNone = new JRadioButton("High risk (0)");
 	private final JRadioButton protectedThree = new JRadioButton("3", true);
 	private final JRadioButton protectedFour = new JRadioButton("4");
 	private final JTextField riskField = new JTextField("500k");
-	private final JButton calculateButton = new JButton("Calculate");
+	private final JButton showInBankButton = new JButton("Show in Bank");
 	private final JLabel statusLabel = new JLabel();
 	private final JPanel resultPanel = new JPanel();
 	private final Map<GearSlot, JCheckBox> slotCheckBoxes = new EnumMap<>(GearSlot.class);
 	private final Map<GearSlot, LoadoutSlotSelection> slotSelections = new EnumMap<>(GearSlot.class);
+	private final Timer recalculationTimer;
 
 	private List<GearItem> latestOwnedGear = new ArrayList<>();
 	private LoadoutResult latestResult;
 	private boolean bankAvailable;
-	private boolean calculating;
 	private boolean updatingSlotControls;
 
 	public WildernessLoadoutsPanel(ItemManager itemManager, Listener listener)
 	{
 		this.itemManager = itemManager;
 		this.listener = listener;
+		recalculationTimer = new Timer(250, event -> calculate());
+		recalculationTimer.setRepeats(false);
 		for (GearSlot slot : GearSlot.values())
 		{
 			slotSelections.put(slot, LoadoutSlotSelection.auto());
 		}
+		focusSelector.addActionListener(event -> requestRecalculate());
+		protectedNone.addActionListener(event -> requestRecalculate());
+		protectedThree.addActionListener(event -> requestRecalculate());
+		protectedFour.addActionListener(event -> requestRecalculate());
+		riskField.getDocument().addDocumentListener(new DocumentListener()
+		{
+			@Override
+			public void insertUpdate(DocumentEvent event)
+			{
+				requestRecalculate();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event)
+			{
+				requestRecalculate();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event)
+			{
+				requestRecalculate();
+			}
+		});
+		showInBankButton.addActionListener(event -> listener.onShowInBank());
 
 		JLabel title = new JLabel("Wilderness Loadouts");
 		title.setForeground(Color.WHITE);
@@ -102,17 +133,13 @@ public class WildernessLoadoutsPanel extends PluginPanel
 		add(sectionLabel("Equipment slots"));
 		add(buildSlotControls());
 
-		calculateButton.setEnabled(false);
-		calculateButton.addActionListener(event -> calculate());
-		add(calculateButton);
-
 		statusLabel.setForeground(ColorScheme.PROGRESS_INPROGRESS_COLOR);
 		statusLabel.setText("<html>Open your bank once to scan your gear.</html>");
 		add(statusLabel);
 
 		JLabel disclaimer = new JLabel(
 			"<html><small>Protected/core items are assumed protected for loadout planning. "
-				+ "Risk is an estimate based on RuneLite item prices.</small></html>");
+				+ "High risk protects none. Risk is an estimate based on RuneLite item prices.</small></html>");
 		disclaimer.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		add(disclaimer);
 
@@ -123,17 +150,22 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 	public void setBankAvailable(boolean available)
 	{
+		boolean becameAvailable = available && !bankAvailable;
 		bankAvailable = available;
-		calculateButton.setEnabled(available && !calculating);
 		if (available)
 		{
-			showStatus("Bank gear scanned. Ready to calculate.", false);
+			if (becameAvailable || latestResult == null)
+			{
+				showStatus("Bank gear scanned. Building a loadout...", false);
+				requestRecalculate();
+			}
 		}
 		else
 		{
-			calculating = false;
+			recalculationTimer.stop();
 			latestResult = null;
 			latestOwnedGear = new ArrayList<>();
+			setBankLayoutVisible(false);
 			resultPanel.removeAll();
 			resultPanel.revalidate();
 			resultPanel.repaint();
@@ -143,8 +175,6 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 	public void setCalculating(boolean calculating)
 	{
-		this.calculating = calculating;
-		calculateButton.setEnabled(bankAvailable && !calculating);
 		if (calculating)
 		{
 			showStatus("Calculating the best valid loadout...", false);
@@ -159,18 +189,22 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 	public void markResultStale()
 	{
-		if (latestResult != null)
+		if (bankAvailable)
 		{
-			showStatus("Gear changed. Calculate again to refresh the result.", true);
+			showStatus("Owned gear changed. Refreshing the loadout...", false);
+			requestRecalculate();
 		}
+	}
+
+	public void setBankLayoutVisible(boolean visible)
+	{
+		showInBankButton.setText(visible ? "Hide in Bank" : "Show in Bank");
 	}
 
 	public void displayResult(LoadoutRequest request, LoadoutResult result, List<GearItem> ownedGear)
 	{
 		latestResult = result;
 		latestOwnedGear = new ArrayList<>(ownedGear);
-		calculating = false;
-		calculateButton.setEnabled(bankAvailable);
 		showStatus("Loadout ready.", false);
 
 		resultPanel.removeAll();
@@ -203,9 +237,7 @@ public class WildernessLoadoutsPanel extends PluginPanel
 			warning.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
 			actions.add(warning);
 		}
-		JButton showInBank = new JButton("Show in Bank");
-		showInBank.addActionListener(event -> listener.onShowInBank());
-		actions.add(showInBank);
+		actions.add(showInBankButton);
 		resultPanel.add(actions, BorderLayout.SOUTH);
 
 		resultPanel.revalidate();
@@ -215,10 +247,12 @@ public class WildernessLoadoutsPanel extends PluginPanel
 	private JPanel buildProtectedPanel()
 	{
 		ButtonGroup group = new ButtonGroup();
+		group.add(protectedNone);
 		group.add(protectedThree);
 		group.add(protectedFour);
-		JPanel panel = new JPanel(new GridLayout(1, 2));
+		JPanel panel = new JPanel(new GridLayout(1, 3));
 		panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		panel.add(protectedNone);
 		panel.add(protectedThree);
 		panel.add(protectedFour);
 		return panel;
@@ -367,16 +401,16 @@ public class WildernessLoadoutsPanel extends PluginPanel
 
 	private void requestRecalculate()
 	{
-		if (bankAvailable && latestResult != null)
+		if (bankAvailable)
 		{
-			calculate();
+			recalculationTimer.restart();
 		}
 	}
 
 	private LoadoutRequest buildRequest()
 	{
 		DefenceFocus focus = (DefenceFocus) focusSelector.getSelectedItem();
-		int protectedLimit = protectedFour.isSelected() ? 4 : 3;
+		int protectedLimit = protectedNone.isSelected() ? 0 : (protectedFour.isSelected() ? 4 : 3);
 		long budget = RiskBudgetParser.parse(riskField.getText());
 		return new LoadoutRequest(focus, protectedLimit, budget, slotSelections);
 	}

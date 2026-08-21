@@ -156,9 +156,9 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 				}
 			});
 		}
-		else if (event.getContainerId() == InventoryID.WORN)
+		else if (event.getContainerId() == InventoryID.INV || event.getContainerId() == InventoryID.WORN)
 		{
-			ownedGearService.markWornEquipmentChanged();
+			ownedGearService.markCarriedGearChanged();
 			SwingUtilities.invokeLater(() ->
 			{
 				if (panel != null)
@@ -220,9 +220,26 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 	@Override
 	public void onShowInBank()
 	{
+		if (bankLayoutService.isGeneratedLayoutOpen())
+		{
+			clientThread.invokeLater(() ->
+			{
+				bankLayoutService.clearGeneratedLayout();
+				SwingUtilities.invokeLater(() ->
+				{
+					if (panel != null)
+					{
+						panel.setBankLayoutVisible(false);
+						panel.showStatus("Virtual Wilderness Loadouts bank layout closed.", false);
+					}
+				});
+			});
+			return;
+		}
+
 		if (latestResult == null)
 		{
-			panel.showStatus("Calculate a loadout before showing it in the bank.", true);
+			panel.showStatus("Wait for the loadout to finish before showing it in the bank.", true);
 			return;
 		}
 
@@ -270,6 +287,7 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 			{
 				if (panel != null)
 				{
+					panel.setBankLayoutVisible(message == null);
 					panel.showStatus(
 						message == null ? "Virtual Wilderness Loadouts bank layout opened." : message,
 						message != null);
@@ -296,7 +314,7 @@ public class WildernessLoadoutsPlugin extends Plugin implements WildernessLoadou
 				if (snapshotVersion != ownedGearService.getSnapshotVersion())
 				{
 					panel.setCalculating(false);
-					panel.showStatus("Gear changed during calculation. Calculate again to refresh.", true);
+					panel.markResultStale();
 					return;
 				}
 

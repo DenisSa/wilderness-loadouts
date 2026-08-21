@@ -75,6 +75,11 @@ public class BankLayoutService
 		return pluginManager.isPluginEnabled(bankTagsPlugin) && pluginManager.isPluginActive(bankTagsPlugin);
 	}
 
+	public boolean isGeneratedLayoutOpen()
+	{
+		return GENERATED_TAG.equals(bankTagsService.getActiveTag());
+	}
+
 	public void enableBankTags() throws PluginInstantiationException
 	{
 		if (!pluginManager.isPluginEnabled(bankTagsPlugin))

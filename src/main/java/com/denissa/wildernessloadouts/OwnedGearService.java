@@ -67,13 +67,7 @@ public class OwnedGearService
 	public void updateBankSnapshot(ItemContainer bank)
 	{
 		bankItemIds.clear();
-		for (Item item : bank.getItems())
-		{
-			if (item.getId() >= 0 && item.getQuantity() > 0)
-			{
-				bankItemIds.add(itemManager.canonicalize(item.getId()));
-			}
-		}
+		addContainerItems(bankItemIds, bank);
 		bankSnapshotSeen = true;
 		snapshotVersion++;
 	}
@@ -88,7 +82,7 @@ public class OwnedGearService
 		return snapshotVersion;
 	}
 
-	public void markWornEquipmentChanged()
+	public void markCarriedGearChanged()
 	{
 		snapshotVersion++;
 	}
@@ -101,6 +95,11 @@ public class OwnedGearService
 		}
 
 		Set<Integer> itemIds = new LinkedHashSet<>(bankItemIds);
+		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
+		if (inventory != null)
+		{
+			addContainerItems(itemIds, inventory);
+		}
 		ItemContainer worn = client.getItemContainer(InventoryID.WORN);
 		if (worn != null)
 		{
@@ -145,11 +144,25 @@ public class OwnedGearService
 	{
 		for (Item item : container.getItems())
 		{
-			if (item.getId() >= 0 && item.getQuantity() > 0)
+			if (item.getId() < 0)
+			{
+				continue;
+			}
+
+			ItemComposition composition = itemManager.getItemComposition(item.getId());
+			if (isPhysicalItem(
+				item,
+				composition.getPlaceholderTemplateId() != -1,
+				composition.getNote() != -1))
 			{
 				itemIds.add(itemManager.canonicalize(item.getId()));
 			}
 		}
+	}
+
+	static boolean isPhysicalItem(Item item, boolean placeholder, boolean noted)
+	{
+		return item.getId() >= 0 && item.getQuantity() > 0 && !placeholder && !noted;
 	}
 
 	private static GearSlot fromEquipmentSlot(int slot)

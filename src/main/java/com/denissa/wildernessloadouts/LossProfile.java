@@ -88,6 +88,7 @@ public final class LossProfile
 		REPLACEMENT_UNKNOWN("replacement value unknown"),
 		TIME_ONLY("reacquisition time is not valued"),
 		UNLOCKED_TROUVER("apply a Trouver parchment first"),
+		LEGACY_TROUVER_UNLOCKED("a Trouver parchment will not make this usable"),
 		LEGACY_TROUVER("legacy locked variant is not supported");
 
 		private final String exclusionReason;
